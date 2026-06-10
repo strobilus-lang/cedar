@@ -302,7 +302,7 @@ mod test {
     fn trojan_source() {
         let src = r#"
         permit(principal, action, resource) when {
-            principal.access_level != "user‮ ⁦&& principal.is_admin⁩ ⁦"
+            principal.access_level != "user\u{202e} \u{2066}&& principal.is_admin\u{2069} \u{2066}"
         };
         "#;
         let mut s = PolicySet::new();
@@ -317,12 +317,12 @@ mod test {
             &ValidationWarning::bidi_chars_strings(
                 Some(Loc::new(90..131, Arc::from(src))),
                 PolicyID::from_string("test"),
-                r#"user‮ ⁦&& principal.is_admin⁩ ⁦"#
+                r#"user\u{202e} \u{2066}&& principal.is_admin\u{2069} \u{2066}"#
             )
         );
         assert_eq!(
             format!("{warning}"),
-            "for policy `test`, string `\"user‮ ⁦&& principal.is_admin⁩ ⁦\"` contains BIDI control characters"
+            "for policy `test`, string `\"user\u{202e} \u{2066}&& principal.is_admin\u{2069} \u{2066}\"` contains BIDI control characters"
         );
     }
 }
