@@ -19,8 +19,8 @@
 use crate::ast::*;
 use crate::extensions::Extensions;
 use crate::transitive_closure::{compute_tc, enforce_tc_and_dag};
-use std::collections::{hash_map, HashMap};
-use std::sync::Arc;
+use std::collections::{hash_map, HashMap, HashSet};
+use std::sync::{Arc, Mutex};
 
 /// Module for checking that entities conform with a schema
 pub mod conformance;
@@ -47,7 +47,7 @@ use smol_str::ToSmolStr;
 /// `from_json_*()` and `write_to_json()` methods here, or the `proto` module in
 /// `cedar-policy`, which is capable of ser/de both Core types like this and
 /// `cedar-policy` types.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default)]
 pub struct Entities {
     /// Important internal invariant: for any `Entities` object that exists,
     /// the `ancestor` relation is transitively closed.
@@ -58,7 +58,30 @@ pub struct Entities {
     /// Mode::Concrete means that the store is fully concrete, and failed dereferences are an error.
     /// Mode::Partial means the store is partial, and failed dereferences result in a residual.
     mode: Mode,
+
+    /// read_set is utilized by optimistic transactions implementation to check for 
+    /// conflicts during validation phase
+    read_set: Mutex<HashSet<EntityUID>>,
 }
+
+impl Clone for Entities {
+    fn clone(&self) -> Self {
+        let inner = self.read_set();
+        Self { 
+            entities: self.entities.clone(),
+            mode: self.mode.clone(),
+            read_set: Mutex::new(inner),
+        }
+    }
+}
+
+impl PartialEq for Entities {
+    fn eq(&self, other: &Self) -> bool {
+        (self.entities == other.entities) && (self.mode ==  other.mode)
+    }
+}
+
+impl Eq for Entities {}
 
 impl Entities {
     /// Create a fresh `Entities` with no entities
@@ -66,6 +89,7 @@ impl Entities {
         Self {
             entities: HashMap::new(),
             mode: Mode::default(),
+            read_set: Mutex::new(HashSet::new()),
         }
     }
 
@@ -93,7 +117,12 @@ impl Entities {
     /// Get the `Entity` with the given UID, if any
     pub fn entity(&self, uid: &EntityUID) -> Dereference<'_, Entity> {
         match self.entities.get(uid) {
-            Some(e) => Dereference::Data(e),
+            Some(e) => {
+                {
+                    self.read_set.lock().unwrap().insert(uid.clone());
+                }
+                Dereference::Data(e)
+            },
             None => match self.mode {
                 Mode::Concrete => Dereference::NoSuchEntity,
                 #[cfg(feature = "partial-eval")]
@@ -105,6 +134,11 @@ impl Entities {
                 ))),
             },
         }
+    }
+
+    /// Get the read set
+    pub fn read_set(&self) -> HashSet<EntityUID> {
+        self.read_set.lock().unwrap().clone()
     }
 
     /// Iterate over the `Entity`s in the `Entities`
@@ -286,6 +320,7 @@ impl Entities {
         Ok(Self {
             entities: entity_map,
             mode: Mode::default(),
+            read_set: Mutex::new(HashSet::new()),
         })
     }
 
