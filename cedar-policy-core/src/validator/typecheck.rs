@@ -2346,7 +2346,7 @@ impl<'a> SingleEnvTypechecker<'a> {
     /// Check that an expression has a type that is a subtype of a given type.
     /// If not, generate a type error and return None. Otherwise, return the
     /// type.
-    fn expect_type<'b, F>(
+    pub fn expect_type<'b, F>(
         &self,
         prior_capability: &CapabilitySet<'b>,
         expr: &'b Expr,
