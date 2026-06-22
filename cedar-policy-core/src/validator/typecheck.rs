@@ -22,7 +22,7 @@ pub(crate) mod test;
 
 mod typecheck_answer;
 use itertools::Itertools;
-pub(crate) use typecheck_answer::TypecheckAnswer;
+pub use typecheck_answer::TypecheckAnswer;
 
 use std::{borrow::Cow, collections::HashSet, iter::zip};
 
