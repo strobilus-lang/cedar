@@ -20,7 +20,7 @@ use crate::validator::types::{CapabilitySet, Type};
 
 /// [`TypecheckAnswer`] holds the result of typechecking an expression.
 #[derive(Debug, Eq, PartialEq)]
-pub(crate) enum TypecheckAnswer<'a> {
+pub enum TypecheckAnswer<'a> {
     /// Typechecking succeeded, and we know the type and a possibly empty capability
     /// set for the expression. The capability set is the set of
     /// (expression, attribute) pairs that are known as safe to access under the
