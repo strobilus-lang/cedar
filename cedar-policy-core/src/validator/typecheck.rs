@@ -323,6 +323,18 @@ pub struct SingleEnvTypechecker<'a> {
 }
 
 impl<'a> SingleEnvTypechecker<'a> {
+
+    /// Creats a SingleEnvTypechecker struct
+    pub fn new(schema: &'a ValidatorSchema, mode: ValidationMode, policy_id: &'a PolicyID, request_env: &'a RequestEnv<'a>) -> SingleEnvTypechecker<'a> {
+        Self {
+            schema,
+            extensions: ExtensionSchemas::all_available(),
+            mode,
+            policy_id,
+            request_env,
+        }
+    }
+
     /// This method handles the majority of the work. Given an expression, and
     /// the prior capability, return the result of typechecking the expression
     /// in the single env this typechecker was constructed for, and add any
@@ -333,17 +345,6 @@ impl<'a> SingleEnvTypechecker<'a> {
         e: &'b Expr,
         type_errors: &mut Vec<ValidationError>,
     ) -> TypecheckAnswer<'b> {
-
-        /// Creats a SingleEnvTypechecker struct
-        pub fn new<'a>(schema: &'a ValidatorSchema, mode: ValidationMode, policy_id: &'a PolicyID, request_env: &'a RequestEnv<'a>) -> SingleEnvTypechecker<'a> {
-            Self {
-                schema,
-                extensions: ExtensionSchemas::all_available(),
-                mode,
-                policy_id,
-                request_env,
-            }
-        }
 
         // We assume there's enough space if we cannot determine it with `remaining_stack`
         if stacker::remaining_stack().unwrap_or(REQUIRED_STACK_SPACE) < REQUIRED_STACK_SPACE {
