@@ -335,7 +335,7 @@ impl<'a> SingleEnvTypechecker<'a> {
     ) -> TypecheckAnswer<'b> {
 
         /// Creats a SingleEnvTypechecker struct
-        pub fn new(schema: &'a ValidatorSchema, mode: ValidationMode, policy_id: &'a PolicyID, request_env: &'a RequestEnv<'a>) -> SingleEnvTypechecker<'a> {
+        pub fn new<'a>(schema: &'a ValidatorSchema, mode: ValidationMode, policy_id: &'a PolicyID, request_env: &'a RequestEnv<'a>) -> SingleEnvTypechecker<'a> {
             Self {
                 schema,
                 extensions: ExtensionSchemas::all_available(),
