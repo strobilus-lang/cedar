@@ -349,7 +349,7 @@ impl Type {
     ///   distinguish this case.)
     /// - If the attribute may exist, but multiple types are possible for the
     ///   attribute (e.g., `AnyEntity`), returns `None`.
-    pub(crate) fn lookup_attribute_type(
+    pub fn lookup_attribute_type(
         schema: &ValidatorSchema,
         ty: &Type,
         attr: &str,

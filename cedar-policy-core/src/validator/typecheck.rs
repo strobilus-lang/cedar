@@ -20,7 +20,7 @@
 
 pub(crate) mod test;
 
-mod typecheck_answer;
+pub mod typecheck_answer;
 use itertools::Itertools;
 pub use typecheck_answer::TypecheckAnswer;
 
