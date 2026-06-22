@@ -189,7 +189,7 @@ impl Type {
         Type::EntityOrRecord(EntityRecordKind::Entity(EntityLUB::single_entity(name)))
     }
 
-    pub(crate) fn any_entity_reference() -> Type {
+    pub fn any_entity_reference() -> Type {
         Type::EntityOrRecord(EntityRecordKind::AnyEntity)
     }
 
