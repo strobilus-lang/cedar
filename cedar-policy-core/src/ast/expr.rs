@@ -1384,7 +1384,7 @@ pub mod expression_construction_errors {
 /// implementations that ignore any source information or other generic data
 /// used to annotate the `Expr`.
 #[derive(Eq, Debug, Clone)]
-pub struct ExprShapeOnly<'a, T: Clone = ()>(Cow<'a, Expr<T>>);
+pub struct ExprShapeOnly<'a, T: Clone = ()>(pub(crate) Cow<'a, Expr<T>>);
 
 impl<'a, T: Clone> ExprShapeOnly<'a, T> {
     /// Construct an `ExprShapeOnly` from a borrowed `Expr`. The `Expr` is not
