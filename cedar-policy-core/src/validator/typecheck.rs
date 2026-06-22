@@ -310,6 +310,7 @@ impl<'a> Typechecker<'a> {
 
 /// Struct which implements typechecking for policies within a single request
 /// env.
+#[derive(Debug)]
 pub struct SingleEnvTypechecker<'a> {
     schema: &'a ValidatorSchema,
     extensions: &'a ExtensionSchemas<'a>,
