@@ -54,8 +54,8 @@ impl<'a> CapabilitySet<'a> {
         self.0.contains(e)
     }
 
-        /// filtp(α) — rimuove capabilities che coinvolgono l'operatore `in`
-    /// Usato da: AddParent, RemoveParent
+    /// filtp(α) — remove capabilities involving the `in` operator
+    /// Used by: AddParent, RemoveParent
     pub fn filtp(&self) -> Self {
         CapabilitySet(
             self.0
@@ -66,21 +66,20 @@ impl<'a> CapabilitySet<'a> {
         )
     }
 
-    /// filta(f, α) — rimuove capabilities sull'attributo f
-    /// Usato da: UpdateAttribute, RemoveAttribute
+    /// filta(f, α) — removes capabilities whose expression accesses attribute `f`
+    /// Used by: UpdateAttribute, RemoveAttribute
     pub fn filta(&self, f: &str) -> Self {
-        let f_expr = Expr::val(SmolStr::new(f));
         CapabilitySet(
             self.0
                 .iter()
-                .filter(|cap| cap.attribute_or_tag.0.as_ref() != &f_expr)
+                .filter(|cap| !Self::expr_references_attribute(cap.on_expr.as_expr(), f))
                 .cloned()
                 .collect()
         )
     }
 
-    /// filtt(E, α) — rimuove capabilities che referenziano entità di tipo E
-    /// Usato da: UpdateEntity, RemoveEntity
+    /// filtt(E, α) — removes capabilities that reference entities of type E
+    /// Used by: UpdateEntity, RemoveEntity
     pub fn filtt(&self, entity_type: &EntityType) -> Self {
         CapabilitySet(
             self.0
@@ -93,40 +92,166 @@ impl<'a> CapabilitySet<'a> {
         )
     }
 
-    fn expr_contains_in(expr: &Expr) -> bool {
+
+
+    /// Returns true if `f` appears as an accessed attribute anywhere in `expr`.
+    /// Used by filta
+    fn expr_references_attribute(expr: &Expr, f: &str) -> bool {
         match expr.expr_kind() {
-            ExprKind::BinaryApp { op: BinaryOp::In, .. } => true,
-            ExprKind::And { left, right } => {
-                Self::expr_contains_in(left) || Self::expr_contains_in(right)
+            // base cases: the attribute f is accessed or tested here
+            ExprKind::GetAttr { expr, attr } | ExprKind::HasAttr { expr, attr } => {
+                attr.as_str() == f || Self::expr_references_attribute(expr, f)
             }
-            ExprKind::Or { left, right } => {
-                Self::expr_contains_in(left) || Self::expr_contains_in(right)
+
+            // recursive cases: inspect every sub-expression
+            ExprKind::If { test_expr, then_expr, else_expr } => {
+                Self::expr_references_attribute(test_expr, f)
+                    || Self::expr_references_attribute(then_expr, f)
+                    || Self::expr_references_attribute(else_expr, f)
             }
-            ExprKind::UnaryApp { arg, .. } => Self::expr_contains_in(arg),
-            ExprKind::GetAttr { expr, .. } => Self::expr_contains_in(expr),
-            ExprKind::HasAttr { expr, .. } => Self::expr_contains_in(expr),
-            _ => false,
+            ExprKind::And { left, right } | ExprKind::Or { left, right } => {
+                Self::expr_references_attribute(left, f)
+                    || Self::expr_references_attribute(right, f)
+            }
+            ExprKind::UnaryApp { arg, .. } => Self::expr_references_attribute(arg, f),
+            ExprKind::BinaryApp { arg1, arg2, .. } => {
+                Self::expr_references_attribute(arg1, f)
+                    || Self::expr_references_attribute(arg2, f)
+            }
+            ExprKind::ExtensionFunctionApp { args, .. } => {
+                args.iter().any(|a| Self::expr_references_attribute(a, f))
+            }
+            ExprKind::Like { expr, .. } | ExprKind::Is { expr, .. } => {
+                Self::expr_references_attribute(expr, f)
+            }
+            ExprKind::Set(elements) => {
+                elements.iter().any(|e| Self::expr_references_attribute(e, f))
+            }
+            ExprKind::Record(fields) => {
+                fields.values().any(|e| Self::expr_references_attribute(e, f))
+            }
+
+            // leaf expressions cannot reference an attribute
+            ExprKind::Lit(_)
+            | ExprKind::Var(_)
+            | ExprKind::Slot(_)
+            | ExprKind::Unknown(_) => false,
+
+            #[cfg(feature = "tolerant-ast")]
+            ExprKind::Error { .. } => false,
         }
     }
 
+    /// Returns true if the `in` operator appears anywhere in `expr`.
+    /// Used by filtp
+    fn expr_contains_in(expr: &Expr) -> bool {
+        match expr.expr_kind() {
+            // base case: the `in` operator is found
+            ExprKind::BinaryApp { op: BinaryOp::In, arg1, arg2 } => {
+                true || Self::expr_contains_in(arg1) || Self::expr_contains_in(arg2)
+            }
+
+            // recursive cases: inspect every sub-expression
+            ExprKind::If { test_expr, then_expr, else_expr } => {
+                Self::expr_contains_in(test_expr)
+                    || Self::expr_contains_in(then_expr)
+                    || Self::expr_contains_in(else_expr)
+            }
+            ExprKind::And { left, right } | ExprKind::Or { left, right } => {
+                Self::expr_contains_in(left) || Self::expr_contains_in(right)
+            }
+            ExprKind::UnaryApp { arg, .. } => Self::expr_contains_in(arg),
+            ExprKind::BinaryApp { arg1, arg2, .. } => {
+                Self::expr_contains_in(arg1) || Self::expr_contains_in(arg2)
+            }
+            ExprKind::ExtensionFunctionApp { args, .. } => {
+                args.iter().any(|a| Self::expr_contains_in(a))
+            }
+            ExprKind::GetAttr { expr, .. }
+            | ExprKind::HasAttr { expr, .. }
+            | ExprKind::Like { expr, .. }
+            | ExprKind::Is { expr, .. } => Self::expr_contains_in(expr),
+            ExprKind::Set(elements) => {
+                elements.iter().any(|e| Self::expr_contains_in(e))
+            }
+            ExprKind::Record(fields) => {
+                fields.values().any(|e| Self::expr_contains_in(e))
+            }
+
+            // leaf expressions cannot contain the `in` operator
+            ExprKind::Lit(_)
+            | ExprKind::Var(_)
+            | ExprKind::Slot(_)
+            | ExprKind::Unknown(_) => false,
+
+            #[cfg(feature = "tolerant-ast")]
+            ExprKind::Error { .. } => false,
+        }
+    }
+
+    /// Returns true if an entity of type `entity_type` is referenced anywhere in `expr`.
+    /// Used by filtt
     fn expr_references_entity_type(expr: &Expr, entity_type: &EntityType) -> bool {
         match expr.expr_kind() {
-            ExprKind::Lit(Literal::EntityUID(uid)) => {
-                uid.entity_type() == entity_type
+            // base case: an entity literal of the given type
+            ExprKind::Lit(Literal::EntityUID(uid)) => uid.entity_type() == entity_type,
+
+            // recursive cases: inspect every sub-expression
+            ExprKind::If { test_expr, then_expr, else_expr } => {
+                Self::expr_references_entity_type(test_expr, entity_type)
+                    || Self::expr_references_entity_type(then_expr, entity_type)
+                    || Self::expr_references_entity_type(else_expr, entity_type)
             }
-            ExprKind::GetAttr { expr, .. } => {
-                Self::expr_references_entity_type(expr, entity_type)
+            ExprKind::And { left, right } | ExprKind::Or { left, right } => {
+                Self::expr_references_entity_type(left, entity_type)
+                    || Self::expr_references_entity_type(right, entity_type)
             }
-            ExprKind::HasAttr { expr, .. } => {
-                Self::expr_references_entity_type(expr, entity_type)
+            ExprKind::UnaryApp { arg, .. } => {
+                Self::expr_references_entity_type(arg, entity_type)
             }
             ExprKind::BinaryApp { arg1, arg2, .. } => {
                 Self::expr_references_entity_type(arg1, entity_type)
                     || Self::expr_references_entity_type(arg2, entity_type)
             }
-            _ => false,
+            ExprKind::ExtensionFunctionApp { args, .. } => {
+                args.iter().any(|a| Self::expr_references_entity_type(a, entity_type))
+            }
+            ExprKind::GetAttr { expr, .. }
+            | ExprKind::HasAttr { expr, .. }
+            | ExprKind::Like { expr, .. }
+            | ExprKind::Is { expr, .. } => {
+                Self::expr_references_entity_type(expr, entity_type)
+            }
+            ExprKind::Set(elements) => {
+                elements.iter().any(|e| Self::expr_references_entity_type(e, entity_type))
+            }
+            ExprKind::Record(fields) => {
+                fields.values().any(|e| Self::expr_references_entity_type(e, entity_type))
+            }
+
+            // other leaf expressions do not reference an entity type
+            ExprKind::Lit(_)
+            | ExprKind::Var(_)
+            | ExprKind::Slot(_)
+            | ExprKind::Unknown(_) => false,
+
+            #[cfg(feature = "tolerant-ast")]
+            ExprKind::Error { .. } => false,
         }
     }
+    
+    /// Removes every capability whose attribute is exactly `f`, regardless of
+    /// its expression. Implements the set difference α ∖ {(e', f) | e' ∈ Expr}.
+    pub fn remove_attribute_caps(&self, f: &str) -> Self {
+        let f_expr = Expr::val(SmolStr::new(f));
+        CapabilitySet(
+            self.0
+                .iter()
+                .filter(|cap| cap.attribute_or_tag.as_expr() != &f_expr)
+                .cloned()
+                .collect()
+        )
+    } 
 }
 
 /// Represent a single capability, which is an expression and some attribute that is
