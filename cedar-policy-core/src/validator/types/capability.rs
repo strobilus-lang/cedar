@@ -72,7 +72,7 @@ impl<'a> CapabilitySet<'a> {
         CapabilitySet(
             self.0
                 .iter()
-                .filter(|cap| !Self::expr_references_attribute(cap.on_expr.as_expr(), f))
+                .filter(|cap| !Self::expr_references_attribute(cap.on_expr.0.as_ref(), f))
                 .cloned()
                 .collect()
         )
@@ -247,7 +247,7 @@ impl<'a> CapabilitySet<'a> {
         CapabilitySet(
             self.0
                 .iter()
-                .filter(|cap| cap.attribute_or_tag.as_expr() != &f_expr)
+                .filter(|cap| cap.attribute_or_tag.0.as_ref() != &f_expr)
                 .cloned()
                 .collect()
         )
