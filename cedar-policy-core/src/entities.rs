@@ -20,7 +20,8 @@ use crate::ast::*;
 use crate::extensions::Extensions;
 use crate::transitive_closure::{compute_tc, enforce_tc_and_dag};
 use std::collections::{hash_map, HashMap, HashSet};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use dashmap::DashMap;
 
 /// Module for checking that entities conform with a schema
 pub mod conformance;
@@ -47,7 +48,7 @@ use smol_str::ToSmolStr;
 /// `from_json_*()` and `write_to_json()` methods here, or the `proto` module in
 /// `cedar-policy`, which is capable of ser/de both Core types like this and
 /// `cedar-policy` types.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Entities {
     /// Important internal invariant: for any `Entities` object that exists,
     /// the `ancestor` relation is transitively closed.
@@ -59,20 +60,9 @@ pub struct Entities {
     /// Mode::Partial means the store is partial, and failed dereferences result in a residual.
     mode: Mode,
 
-    /// read_set is utilized by optimistic transactions implementation to check for 
-    /// conflicts during validation phase
-    read_set: Mutex<HashSet<EntityUID>>,
-}
-
-impl Clone for Entities {
-    fn clone(&self) -> Self {
-        let inner = self.read_set();
-        Self { 
-            entities: self.entities.clone(),
-            mode: self.mode.clone(),
-            read_set: Mutex::new(inner),
-        }
-    }
+    /// read_map is utilized to keep track of the read sets of every 
+    /// transaction being executed
+    read_map: Arc<DashMap<tokio::task::Id, HashSet<EntityUID>>>,
 }
 
 impl PartialEq for Entities {
@@ -89,7 +79,7 @@ impl Entities {
         Self {
             entities: HashMap::new(),
             mode: Mode::default(),
-            read_set: Mutex::new(HashSet::new()),
+            read_map: Arc::new(DashMap::new()),
         }
     }
 
@@ -119,7 +109,8 @@ impl Entities {
         match self.entities.get(uid) {
             Some(e) => {
                 {
-                    self.read_set.lock().unwrap().insert(uid.clone());
+                    let mut thread_read_set = self.read_map.entry(tokio::task::id()).or_insert(HashSet::new());
+                    thread_read_set.insert(uid.clone());
                 }
                 Dereference::Data(e)
             },
@@ -137,8 +128,13 @@ impl Entities {
     }
 
     /// Get the read set
-    pub fn read_set(&self) -> HashSet<EntityUID> {
-        self.read_set.lock().unwrap().clone()
+    pub fn extract_read_set(&self) -> HashSet<EntityUID> {
+        self.read_map.get(&tokio::task::id()).unwrap().clone()
+    }
+
+    /// Removes the read set for a specified task id from the map 
+    pub fn clean_map_entry(&self, task_id: &tokio::task::Id) {
+        self.read_map.remove(task_id);
     }
 
     /// Iterate over the `Entity`s in the `Entities`
@@ -320,7 +316,7 @@ impl Entities {
         Ok(Self {
             entities: entity_map,
             mode: Mode::default(),
-            read_set: Mutex::new(HashSet::new()),
+            read_map: Arc::new(DashMap::new()),
         })
     }
 
