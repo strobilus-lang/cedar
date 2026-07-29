@@ -66,11 +66,10 @@ pub struct Entities {
 
 impl Clone for Entities {
     fn clone(&self) -> Self {
-        let inner = self.read_set();
         Self { 
             entities: self.entities.clone(),
             mode: self.mode.clone(),
-            read_set: Mutex::new(inner),
+            read_set: Mutex::new(HashSet::new()),
         }
     }
 }
@@ -137,7 +136,7 @@ impl Entities {
     }
 
     /// Get the read set
-    pub fn read_set(&self) -> HashSet<EntityUID> {
+    pub fn extract_read_set(&self) -> HashSet<EntityUID> {
         self.read_set.lock().unwrap().clone()
     }
 
