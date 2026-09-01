@@ -140,6 +140,12 @@ impl Entities {
         self.read_set.lock().unwrap().clone()
     }
 
+    /// Empties the read set
+    pub fn empty_read_set(&self) {
+        let mut set = self.read_set.lock().unwrap();
+        *set = HashSet::new();
+    }
+
     /// Iterate over the `Entity`s in the `Entities`
     pub fn iter(&self) -> impl Iterator<Item = &Entity> {
         self.entities.values().map(|e| e.as_ref())
