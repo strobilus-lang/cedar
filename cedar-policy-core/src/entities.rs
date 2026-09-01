@@ -115,11 +115,11 @@ impl Entities {
 
     /// Get the `Entity` with the given UID, if any
     pub fn entity(&self, uid: &EntityUID) -> Dereference<'_, Entity> {
+        {
+            self.read_set.lock().unwrap().insert(uid.clone());
+        }
         match self.entities.get(uid) {
             Some(e) => {
-                {
-                    self.read_set.lock().unwrap().insert(uid.clone());
-                }
                 Dereference::Data(e)
             },
             None => match self.mode {
